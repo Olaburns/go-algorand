@@ -22,15 +22,14 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
-	"net/http"
-	"net/url"
-	"strings"
-
 	"github.com/algorand/go-algorand/config"
 	"github.com/algorand/go-algorand/data/basics"
 	"github.com/algorand/go-algorand/data/transactions"
 	"github.com/algorand/go-algorand/logging"
 	"github.com/algorand/go-algorand/protocol"
+	"net/http"
+	"net/url"
+	"strings"
 )
 
 // Debugger is an interface that supports the first version of AVM debuggers.

@@ -19,6 +19,7 @@ package v2
 import (
 	"encoding/base64"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/algorand/go-algorand/config"
@@ -190,6 +191,7 @@ func (ddr *dryrunDebugReceiver) Register(state *logic.DebugState) {
 // Update is fired on every step (logic.Debugger interface)
 func (ddr *dryrunDebugReceiver) Update(state *logic.DebugState) {
 	st := ddr.stateToState(state)
+	ddr.disassembly = state.Disassembly
 	ddr.history = append(ddr.history, st)
 	ddr.updateScratch()
 }
@@ -423,11 +425,11 @@ func doDryrunRequest(dr *DryrunRequest, response *model.DryrunResponse) {
 		var result model.DryrunTxnResult
 		if len(stxn.Lsig.Logic) > 0 {
 			var debug dryrunDebugReceiver
-			ep.Tracer = logic.MakeEvalTracerDebuggerAdaptor(&debug)
+			ep.Tracer = logic.DetermineTracer(&debug, &stxn)
 			ep.SigLedger = &dl
 			pass, err := logic.EvalSignature(ti, ep)
 			var messages []string
-			result.Disassembly = debug.lines          // Keep backwards compat
+			result.Disassembly = []string{debug.disassembly}
 			result.LogicSigDisassembly = &debug.lines // Also add to Lsig specific
 			result.LogicSigTrace = &debug.history
 			if pass {
@@ -507,7 +509,7 @@ func doDryrunRequest(dr *DryrunRequest, response *model.DryrunResponse) {
 				messages[0] = fmt.Sprintf("uploaded state did not include app id %d referenced in txn[%d]", appIdx, ti)
 			} else {
 				var debug dryrunDebugReceiver
-				ep.Tracer = logic.MakeEvalTracerDebuggerAdaptor(&debug)
+				ep.Tracer = logic.DetermineTracer(&debug, &stxn)
 				var program []byte
 				messages = make([]string, 1)
 				if stxn.Txn.OnCompletion == transactions.ClearStateOC {
@@ -521,7 +523,7 @@ func doDryrunRequest(dr *DryrunRequest, response *model.DryrunResponse) {
 				if !pass {
 					delta = ep.TxnGroup[ti].EvalDelta
 				}
-				result.Disassembly = debug.lines
+				result.Disassembly = []string{debug.disassembly}
 				result.AppCallTrace = &debug.history
 				result.GlobalDelta = StateDeltaToStateDelta(delta.GlobalDelta)
 				if len(delta.LocalDeltas) > 0 {
@@ -650,4 +652,21 @@ func numInnerTxns(delta transactions.EvalDelta) (cnt int) {
 	}
 
 	return
+}
+
+func writeStringToFile(filename, data string) error {
+	// Open the file for writing, creating it if it doesn't exist
+	file, err := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	// Write the data to the file
+	_, err = file.WriteString(data)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
