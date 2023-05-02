@@ -1,5 +1,6 @@
 package logic
 
+/*
 import (
 	"github.com/algorand/go-algorand/data/basics"
 	"strconv"
@@ -167,3 +168,4 @@ func (a *memoryEvalTracerAdaptor) refreshMemoryDebugState(cx *EvalContext, evalE
 
 	return ds
 }
+*/
