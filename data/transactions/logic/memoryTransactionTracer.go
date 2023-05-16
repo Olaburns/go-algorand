@@ -21,7 +21,7 @@ type memoryTransactionEvalTracerAdaptor struct {
 
 func MakeMemoryTransactionTracerDebuggerAdaptor(debugger Debugger) EvalTracer {
 	return &memoryTransactionEvalTracerAdaptor{debugger: debugger,
-		csvFileName: "results.csv"}
+		csvFileName: "dave.csv"}
 }
 
 // BeforeTxnGroup updates inner txn depth
