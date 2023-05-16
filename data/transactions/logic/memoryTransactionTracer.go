@@ -75,10 +75,9 @@ func (a *memoryTransactionEvalTracerAdaptor) AfterProgram(cx *EvalContext, evalE
 }
 
 func makeMemoryTransactionDebugState(cx *EvalContext) *DebugState {
-	_, dsInfo, err := disassembleInstrumented(cx.program, nil)
+	disasm, dsInfo, err := disassembleInstrumented(cx.program, nil)
 
 	// Disasm is just a placeholder for the observed results
-	disasm := ""
 	if err != nil {
 		// Report disassembly error as program text
 		disasm = err.Error()
