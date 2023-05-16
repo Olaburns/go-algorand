@@ -2,6 +2,7 @@ package logic
 
 import (
 	"github.com/algorand/go-algorand/data/transactions"
+	"github.com/algorand/go-algorand/logging"
 	"os"
 	"strings"
 	"unicode"
@@ -11,10 +12,14 @@ func DetermineTracer(debugger Debugger, stxn *transactions.SignedTxn) EvalTracer
 	if len(stxn.Txn.ApplicationArgs) > 1 {
 		tracerType := string(stxn.Txn.ApplicationArgs[1])
 		tracerType = removeLeadingChars(tracerType)
-		writeStringToFile("selection.txt", tracerType)
+		logging.Base().Info("Test: Arrived at Determine Tracer")
 		switch tracerType {
 		case "timingTracer":
 			return MakeTimingTracerDebuggerAdaptor(debugger)
+		case "memoryTracer":
+			return MakeMemoryTracerDebuggerAdaptor(debugger)
+		case "memoryTransactionTracer":
+			return MakeMemoryTransactionTracerDebuggerAdaptor(debugger)
 		default:
 			return MakeEvalTracerDebuggerAdaptor(debugger)
 		}

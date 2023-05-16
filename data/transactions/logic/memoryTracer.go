@@ -1,19 +1,13 @@
 package logic
 
-/*
 import (
+	"encoding/csv"
 	"github.com/algorand/go-algorand/data/basics"
+	"io/ioutil"
+	"log"
+	"os"
+	"runtime"
 	"strconv"
-	"time"
-)
-
-package logic
-
-import (
-"strconv"
-"time"
-
-"github.com/algorand/go-algorand/data/basics"
 )
 
 // Debugger is an interface that supports the first version of AVM debuggers.
@@ -24,17 +18,20 @@ import (
 
 type memoryEvalTracerAdaptor struct {
 	NullEvalTracer
-
-	debugger          Debugger
-	txnDepth          int
-	debugState        *DebugState
-	time              time.Time
-	elapsedTimeString string
-	opcode            OpSpec
+	debugger    Debugger
+	txnDepth    int
+	debugState  *DebugState
+	opCounter   int
+	resolution  int
+	csvFileName string
 }
 
 func MakeMemoryTracerDebuggerAdaptor(debugger Debugger) EvalTracer {
-	return &memoryEvalTracerAdaptor{debugger: debugger}
+	return &memoryEvalTracerAdaptor{debugger: debugger,
+		opCounter:   0,
+		resolution:  100,
+		csvFileName: "results.csv",
+	}
 }
 
 // BeforeTxnGroup updates inner txn depth
@@ -53,7 +50,13 @@ func (a *memoryEvalTracerAdaptor) BeforeProgram(cx *EvalContext) {
 		// only report updates for top-level transactions, for backwards compatibility
 		return
 	}
-	a.debugState = makeTimingDebugState(cx)
+	err := createCSV(a.csvFileName)
+
+	if err != nil {
+		log.Printf("an error occured during finalizing the results: %v", err)
+	}
+
+	a.debugState = makeMemoryDebugState(cx)
 	a.debugger.Register(a.refreshMemoryDebugState(cx, nil, false))
 }
 
@@ -63,33 +66,29 @@ func (a *memoryEvalTracerAdaptor) BeforeOpcode(cx *EvalContext) {
 		// only report updates for top-level transactions, for backwards compatibility
 		return
 	}
-	opcode := opsByOpcode[LogicVersion][cx.program[cx.pc]]
-	a.opcode = opcode
 	a.debugger.Update(a.refreshMemoryDebugState(cx, nil, false))
-	a.time = time.Now()
 }
 
 func (a *memoryEvalTracerAdaptor) AfterOpcode(cx *EvalContext, evalError error) {
-	elapsedTime := strconv.FormatInt(time.Since(a.time).Nanoseconds(), 10)
-	a.elapsedTimeString = elapsedTime
-	a.debugger.Update(a.refreshMemoryDebugState(cx, nil, true))
+	if 0 == a.opCounter%a.resolution {
+		a.updateResults()
+	}
+	a.opCounter = a.opCounter + 1
+	a.debugger.Update(a.refreshMemoryDebugState(cx, nil, false))
 }
 
 // AfterProgram invokes the debugger's Complete hook
 func (a *memoryEvalTracerAdaptor) AfterProgram(cx *EvalContext, evalError error) {
-
 	if a.txnDepth > 0 {
 		// only report updates for top-level transactions, for backwards compatibility
 		return
 	}
-	a.debugger.Complete(a.refreshMemoryDebugState(cx, evalError, false))
+	a.debugger.Complete(a.refreshMemoryDebugState(cx, evalError, true))
 }
 
 func makeMemoryDebugState(cx *EvalContext) *DebugState {
-	_, dsInfo, err := disassembleInstrumented(cx.program, nil)
+	disasm, dsInfo, err := disassembleInstrumented(cx.program, nil)
 
-	// Disasm is just a placeholder for the observed results
-	disasm := "Opcode, Timing\n"
 	if err != nil {
 		// Report disassembly error as program text
 		disasm = err.Error()
@@ -126,16 +125,16 @@ func makeMemoryDebugState(cx *EvalContext) *DebugState {
 	return ds
 }
 
-func (a *memoryEvalTracerAdaptor) updateMemoryString(ds *DebugState) string {
+func (a *memoryEvalTracerAdaptor) updateResults() {
+	err := addMemStatsToCSV(a.csvFileName)
 
-	result := ds.Disassembly + a.opcode.Name + "," + a.elapsedTimeString + "\n"
-	writeStringToFile("UpdatetTimingString.txt", result)
-	return result
+	if err != nil {
+		log.Printf("an error occured during updating the results: %v", err)
+	}
 }
 
-func (a *memoryEvalTracerAdaptor) refreshMemoryDebugState(cx *EvalContext, evalError error, addMemoryStats bool) *DebugState {
+func (a *memoryEvalTracerAdaptor) refreshMemoryDebugState(cx *EvalContext, evalError error, finalizeResults bool) *DebugState {
 	ds := a.debugState
-
 	// Update pc, line, error, stack, scratch space, callstack,
 	// and opcode budget
 	ds.PC = cx.pc
@@ -158,8 +157,9 @@ func (a *memoryEvalTracerAdaptor) refreshMemoryDebugState(cx *EvalContext, evalE
 	ds.Scratch = scratch
 	ds.OpcodeBudget = cx.remainingBudget()
 	ds.CallStack = ds.parseCallstack(cx.callstack)
-	if addMemoryStats {
-		ds.Disassembly = a.updateMemoryString(ds)
+
+	if finalizeResults {
+		ds.Disassembly = a.finalizeResults()
 	}
 
 	if (cx.runModeFlags & ModeApp) != 0 {
@@ -168,4 +168,74 @@ func (a *memoryEvalTracerAdaptor) refreshMemoryDebugState(cx *EvalContext, evalE
 
 	return ds
 }
-*/
+
+func (a *memoryEvalTracerAdaptor) finalizeResults() string {
+	csvString, err := getCSVAsStringAndDelete(a.csvFileName)
+	if err != nil {
+		log.Printf("an error occured during finalizing the results: %v", err)
+	}
+
+	return csvString
+}
+
+func addMemStatsToCSV(filename string) error {
+	var mem runtime.MemStats
+	runtime.ReadMemStats(&mem)
+
+	file, err := os.OpenFile(filename, os.O_APPEND|os.O_WRONLY, os.ModeAppend)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	writer := csv.NewWriter(file)
+	defer writer.Flush()
+
+	stats := []string{
+		strconv.Itoa(int(mem.HeapAlloc)),
+		strconv.Itoa(int(mem.HeapSys)),
+		strconv.Itoa(int(mem.HeapIdle)),
+		strconv.Itoa(int(mem.HeapInuse)),
+		strconv.Itoa(int(mem.StackInuse)),
+		strconv.Itoa(int(mem.StackSys)),
+	}
+	err = writer.Write(stats) // writing stats
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func createCSV(filename string) error {
+	file, err := os.Create(filename)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	writer := csv.NewWriter(file)
+	defer writer.Flush()
+
+	headers := []string{"heapAlloc", "heapSys", "heapIdle", "heapInuse", "stackInUse", "stackSys"}
+	err = writer.Write(headers) // writing header
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func getCSVAsStringAndDelete(filename string) (string, error) {
+	bytes, err := ioutil.ReadFile(filename)
+	if err != nil {
+		return "", err
+	}
+
+	err = os.Remove(filename)
+	if err != nil {
+		return "", err
+	}
+
+	return string(bytes), nil
+}

@@ -1,6 +1,10 @@
 package logic
 
 import (
+	"bytes"
+	"encoding/csv"
+	"errors"
+	"fmt"
 	"strconv"
 	"time"
 
@@ -13,6 +17,11 @@ import (
 // Deprecated: This interface does not support non-app call or inner transactions. Use EvalTracer
 // instead.
 
+type evalTimingResults struct {
+	opcodes []string
+	timings []string
+}
+
 type timingEvalTracerAdaptor struct {
 	NullEvalTracer
 
@@ -22,10 +31,15 @@ type timingEvalTracerAdaptor struct {
 	time              time.Time
 	elapsedTimeString string
 	opcode            OpSpec
+	results           *evalTimingResults
 }
 
 func MakeTimingTracerDebuggerAdaptor(debugger Debugger) EvalTracer {
-	return &timingEvalTracerAdaptor{debugger: debugger}
+	return &timingEvalTracerAdaptor{debugger: debugger,
+		results: &evalTimingResults{
+			timings: []string{},
+			opcodes: []string{},
+		}}
 }
 
 // BeforeTxnGroup updates inner txn depth
@@ -63,7 +77,8 @@ func (a *timingEvalTracerAdaptor) BeforeOpcode(cx *EvalContext) {
 func (a *timingEvalTracerAdaptor) AfterOpcode(cx *EvalContext, evalError error) {
 	elapsedTime := strconv.FormatInt(time.Since(a.time).Nanoseconds(), 10)
 	a.elapsedTimeString = elapsedTime
-	a.debugger.Update(a.refreshTimingDebugState(cx, nil, true))
+	a.updateResults()
+	a.debugger.Update(a.refreshTimingDebugState(cx, nil, false))
 }
 
 // AfterProgram invokes the debugger's Complete hook
@@ -73,14 +88,11 @@ func (a *timingEvalTracerAdaptor) AfterProgram(cx *EvalContext, evalError error)
 		// only report updates for top-level transactions, for backwards compatibility
 		return
 	}
-	a.debugger.Complete(a.refreshTimingDebugState(cx, evalError, false))
+	a.debugger.Complete(a.refreshTimingDebugState(cx, evalError, true))
 }
 
 func makeTimingDebugState(cx *EvalContext) *DebugState {
-	_, dsInfo, err := disassembleInstrumented(cx.program, nil)
-
-	// Disasm is just a placeholder for the observed results
-	disasm := "Opcode, Timing\n"
+	disasm, dsInfo, err := disassembleInstrumented(cx.program, nil)
 	if err != nil {
 		// Report disassembly error as program text
 		disasm = err.Error()
@@ -117,14 +129,12 @@ func makeTimingDebugState(cx *EvalContext) *DebugState {
 	return ds
 }
 
-func (a *timingEvalTracerAdaptor) updateTimingString(ds *DebugState) string {
-
-	result := ds.Disassembly + a.opcode.Name + "," + a.elapsedTimeString + "\n"
-	writeStringToFile("UpdatetTimingString.txt", result)
-	return result
+func (a *timingEvalTracerAdaptor) updateResults() {
+	a.results.opcodes = append(a.results.opcodes, a.opcode.Name)
+	a.results.timings = append(a.results.timings, a.elapsedTimeString)
 }
 
-func (a *timingEvalTracerAdaptor) refreshTimingDebugState(cx *EvalContext, evalError error, addTime bool) *DebugState {
+func (a *timingEvalTracerAdaptor) refreshTimingDebugState(cx *EvalContext, evalError error, finalizeResults bool) *DebugState {
 	ds := a.debugState
 
 	// Update pc, line, error, stack, scratch space, callstack,
@@ -149,8 +159,9 @@ func (a *timingEvalTracerAdaptor) refreshTimingDebugState(cx *EvalContext, evalE
 	ds.Scratch = scratch
 	ds.OpcodeBudget = cx.remainingBudget()
 	ds.CallStack = ds.parseCallstack(cx.callstack)
-	if addTime {
-		ds.Disassembly = a.updateTimingString(ds)
+
+	if finalizeResults {
+		ds.Disassembly = a.finalizeResults()
 	}
 
 	if (cx.runModeFlags & ModeApp) != 0 {
@@ -158,4 +169,54 @@ func (a *timingEvalTracerAdaptor) refreshTimingDebugState(cx *EvalContext, evalE
 	}
 
 	return ds
+}
+
+func (a *timingEvalTracerAdaptor) finalizeResults() string {
+	csvString, err := TimingDataToCSV(a.results.opcodes, a.results.timings)
+
+	if err != nil {
+		fmt.Errorf("an error occured during finalizing the results: %v", err)
+	}
+
+	return csvString
+}
+
+func TimingDataToCSV(opcodes []string, timings []string) (string, error) {
+	// Check if all slices have the same length
+	if len(opcodes) != len(timings) {
+		return "", errors.New("all slices must have the same length")
+	}
+
+	// Create a buffer to hold the CSV data
+	buf := &bytes.Buffer{}
+	w := csv.NewWriter(buf)
+
+	// Write the headers to the CSV
+	err := w.Write([]string{"opcodes", "time"})
+	if err != nil {
+		return "", err
+	}
+
+	// Write data to CSV
+	for i := 0; i < len(opcodes); i++ {
+		row := []string{
+			opcodes[i],
+			timings[i],
+		}
+		err = w.Write(row)
+		if err != nil {
+			return "", err
+		}
+	}
+
+	// Flush any remaining data to the writer
+	w.Flush()
+
+	// Check for any errors during write
+	err = w.Error()
+	if err != nil {
+		return "", err
+	}
+
+	return buf.String(), nil
 }
