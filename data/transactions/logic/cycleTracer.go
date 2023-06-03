@@ -94,7 +94,7 @@ func (a *cycleEvalTracerAdaptor) AfterOpcode(cx *EvalContext, evalError error) {
 		_ = writeStringToFile("tracer_log2.txt", err.Error())
 	}
 	var cycles int
-	if pv != nil && pv.Value != nil {
+	if pv != nil {
 		cycles = int(pv.Value)
 	} else {
 		cycles = 0
