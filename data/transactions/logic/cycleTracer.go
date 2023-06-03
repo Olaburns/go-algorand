@@ -23,8 +23,6 @@ import (
 type evalCycleResults struct {
 	opcodes []string
 	cycles  []string
-	cb      func()
-	fd      int
 }
 
 type cycleEvalTracerAdaptor struct {
@@ -37,6 +35,8 @@ type cycleEvalTracerAdaptor struct {
 	elapsedTimeString string
 	opcode            OpSpec
 	results           *evalCycleResults
+	cb                func()
+	fd                int
 }
 
 func MakeCycleTracerDebuggerAdaptor(debugger Debugger) EvalTracer {
@@ -80,12 +80,12 @@ func (a *cycleEvalTracerAdaptor) BeforeOpcode(cx *EvalContext) {
 	if err != nil {
 		fmt.Println("StopCPUCycles failed:", err)
 	}
-	a.results.cb = cb
-	a.results.fd = fd
+	a.cb = cb
+	a.fd = fd
 }
 
 func (a *cycleEvalTracerAdaptor) AfterOpcode(cx *EvalContext, evalError error) {
-	pv, err := perf.StopCPUCycles(a.results.cb, a.results.fd)
+	pv, err := perf.StopCPUCycles(a.cb, a.fd)
 	if err != nil {
 		fmt.Println("StopCPUCycles failed:", err)
 	}
