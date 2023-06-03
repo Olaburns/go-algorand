@@ -41,6 +41,7 @@ type cycleEvalTracerAdaptor struct {
 
 func MakeCycleTracerDebuggerAdaptor(debugger Debugger) EvalTracer {
 	return &cycleEvalTracerAdaptor{debugger: debugger,
+		fd: 0,
 		results: &evalCycleResults{
 			cycles:  []string{},
 			opcodes: []string{},
