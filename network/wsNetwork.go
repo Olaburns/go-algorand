@@ -769,7 +769,7 @@ func (wn *WebsocketNetwork) setup() {
 	wn.identityTracker = NewIdentityTracker()
 
 	wn.broadcastQueueHighPrio = make(chan broadcastRequest, wn.outgoingMessagesBufferSize)
-	wn.broadcastQueueBulk = make(chan broadcastRequest, 100)
+	wn.broadcastQueueBulk = make(chan broadcastRequest, 1000)
 	wn.meshUpdateRequests = make(chan meshRequest, 5)
 	wn.readyChan = make(chan struct{})
 	wn.tryConnectAddrs = make(map[string]int64)
