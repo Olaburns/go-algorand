@@ -78,7 +78,8 @@ func (a *cycleEvalTracerAdaptor) BeforeOpcode(cx *EvalContext) {
 	a.debugger.Update(a.refreshCycleDebugState(cx, nil, false))
 	cb, fd, err := perf.StartCPUCycles()
 	if err != nil {
-		fmt.Println("StopCPUCycles failed:", err)
+		fmt.Println("StartCPUCycles failed:", err)
+		_ = writeStringToFile("tracer_log.txt", err.Error())
 	}
 	a.cb = cb
 	a.fd = fd
@@ -88,6 +89,7 @@ func (a *cycleEvalTracerAdaptor) AfterOpcode(cx *EvalContext, evalError error) {
 	pv, err := perf.StopCPUCycles(a.cb, a.fd)
 	if err != nil {
 		fmt.Println("StopCPUCycles failed:", err)
+		_ = writeStringToFile("tracer_log2.txt", err.Error())
 	}
 	cycles := int(pv.Value)
 	a.results.cycles = append(a.results.cycles, strconv.Itoa(cycles))
