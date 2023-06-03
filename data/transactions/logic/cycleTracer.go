@@ -81,6 +81,7 @@ func (a *cycleEvalTracerAdaptor) BeforeOpcode(cx *EvalContext) {
 		fmt.Println("StartCPUCycles failed:", err)
 		_ = writeStringToFile("tracer_log.txt", err.Error())
 	}
+	writeStringToFile("fd.txt", strconv.Itoa(fd))
 	a.cb = cb
 	a.fd = fd
 }
