@@ -92,7 +92,13 @@ func (a *cycleEvalTracerAdaptor) AfterOpcode(cx *EvalContext, evalError error) {
 		fmt.Println("StopCPUCycles failed:", err)
 		_ = writeStringToFile("tracer_log2.txt", err.Error())
 	}
-	cycles := int(pv.Value)
+	var cycles int
+	if pv != nil && pv.Value != nil {
+		cycles = int(pv.Value)
+	} else {
+		cycles = 0
+	}
+
 	a.results.cycles = append(a.results.cycles, strconv.Itoa(cycles))
 	a.debugger.Update(a.refreshCycleDebugState(cx, nil, false))
 }
