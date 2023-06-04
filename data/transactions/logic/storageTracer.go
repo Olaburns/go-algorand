@@ -45,7 +45,7 @@ func MakeStroageTracerDebuggerAdaptor(debugger Debugger) EvalTracer {
 	return &storageEvalTracerAdaptor{
 		debugger:   debugger,
 		results:    []*ProcIO{},
-		resolution: 100,
+		resolution: 1,
 		opCounter:  0,
 	}
 }

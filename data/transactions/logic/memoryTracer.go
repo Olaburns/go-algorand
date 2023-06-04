@@ -29,7 +29,7 @@ type memoryEvalTracerAdaptor struct {
 func MakeMemoryTracerDebuggerAdaptor(debugger Debugger) EvalTracer {
 	return &memoryEvalTracerAdaptor{debugger: debugger,
 		opCounter:   0,
-		resolution:  100,
+		resolution:  1,
 		csvFileName: "results.csv",
 	}
 }
